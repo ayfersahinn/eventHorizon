@@ -1,11 +1,9 @@
 import uuid
-
 import httpx
-
+from datetime import datetime  # Tarih dönüşümü için eklendi
 
 BTK_TARGET_URL = "https://www.btkakademi.gov.tr/portal/activities"
 BTK_EVENTS_API_URL = "https://www.btkakademi.gov.tr/api/service/v1/public/51/employee/external/events/search?language=tr"
-
 
 async def scrape_btk_activities():
     print(f"URL'e gidiliyor: {BTK_TARGET_URL}")
@@ -41,12 +39,34 @@ async def scrape_btk_activities():
         print(f"BTK API isteği başarısız oldu: {type(exc).__name__}: {exc}")
         return []
 
-    events = []
+    raw_events = []
     for key in ("upcomingEvents", "ongoingEvents"):
         section = data.get(key, {})
-        events.extend(section.get("resultSet", []))
+        raw_events.extend(section.get("resultSet", []))
 
-    if not events:
+    if not raw_events:
         print("BTK API yanıtında etkinlik bulunamadı.")
+        return []
 
-    return events
+    # Tarihleri düzelterek yeni listeye aktarıyoruz
+    processed_events = []
+    for event in raw_events:
+        # BTK'dan gelen milisaniye cinsinden tarihi alıyoruz
+        start_date_raw = event.get("startDate")
+        
+        formatted_date = "Tarih Belirtilmedi"
+        if start_date_raw:
+            try:
+                # Milisaniyeyi saniyeye çevirip (/1000) okunabilir formata dönüştürüyoruz
+                formatted_date = datetime.fromtimestamp(int(start_date_raw) / 1000).strftime('%d.%m.%Y %H:%M')
+            except Exception:
+                formatted_date = str(start_date_raw)
+
+        # Event objesini güncelleyerek listeye ekle
+        event["startDateFormatted"] = formatted_date
+        # Groq'un karıştırmaması için orijinal tarih alanını da güncelleyebiliriz
+        event["startDate"] = formatted_date 
+        
+        processed_events.append(event)
+
+    return processed_events
