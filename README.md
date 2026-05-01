@@ -17,6 +17,8 @@ Events Horizon, BTK Akademi, Techcareer, Youthall ve GDG Gaziantep gibi farklı 
 **İlk odak noktası:** Gaziantep  
 **Hedef:** Türkiye geneli
 
+## 🌐 Canlı Demo
+[eventshorizon-app.netlify.app](https://eventshorizon-app.netlify.app)
 ---
 
 ## ✨ Özellikler
