@@ -1,6 +1,6 @@
 "use client";
 import { createClient } from "@supabase/supabase-js";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   MapPin,
   Calendar,
@@ -37,35 +37,6 @@ const supabase = createClient(
 );
 
 
-const cities = [
-  "Tümü",
-  "Gaziantep",
-  "İstanbul",
-  "Ankara",
-  "İzmir",
-  "Bursa",
-  "Adana",
-];
-const eventTypes = [
-  "Tümü",
-  "Bootcamp",
-  "Workshop",
-  "Kurs",
-  "Hackathon",
-  "Konferans",
-];
-const institutions = [
-  "Tümü",
-  "BTK Akademi",
-  "Müzeyyen Erkul Bilim Merkezi",
-  "Gaziantep Büyükşehir",
-  "Techcareer",
-  "Coderspace",
-  "Habitat",
-  "GDG Gaziantep",
-];
-const priceOptions = ["Tümü", "Ücretsiz", "Ücretli"];
-
 const categoryIcons = {
   "Yapay Zeka": Cpu,
   Blockchain: Layers,
@@ -74,6 +45,14 @@ const categoryIcons = {
   Mobil: Rocket,
   "Veri Bilimi": TrendingUp,
 };
+
+function formatCompactNumber(value) {
+  if (!Number.isFinite(value)) return "-";
+  return new Intl.NumberFormat("tr-TR", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+}
 
 function GradientOrb({ x, y, color, size = 300, opacity = 0.15 }) {
   return (
@@ -129,8 +108,14 @@ function InstitutionBadge({ name, color, dark }) {
 function EventCard({ event, dark }) {
   const [hovered, setHovered] = useState(false);
   const Icon = categoryIcons[event.category] || Zap;
-  const occupancyPercent = Math.round((event.seats / event.totalSeats) * 100);
-  const isAlmostFull = occupancyPercent > 75;
+  const hasSeatData =
+    Number.isFinite(event.seats) &&
+    Number.isFinite(event.totalSeats) &&
+    event.totalSeats > 0;
+  const occupancyPercent = hasSeatData
+    ? Math.round((event.seats / event.totalSeats) * 100)
+    : 0;
+  const isAlmostFull = hasSeatData && occupancyPercent > 75;
 
   const bg = dark
     ? hovered
@@ -192,7 +177,9 @@ function EventCard({ event, dark }) {
       <div
         style={{
           height: 120,
-          background: `linear-gradient(135deg, ${event.institutionColor}22, ${event.institutionColor}44)`,
+          background: event.imageUrl
+            ? `url(${event.imageUrl}) center/cover no-repeat`
+            : `linear-gradient(135deg, ${event.institutionColor}22, ${event.institutionColor}44)`,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -200,20 +187,30 @@ function EventCard({ event, dark }) {
           borderBottom: `1px solid ${border}`,
         }}
       >
-        <div
-          style={{
-            width: 56,
-            height: 56,
-            borderRadius: 14,
-            background: event.institutionColor,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            boxShadow: `0 8px 24px ${event.institutionColor}44`,
-          }}
-        >
-          <Icon size={24} color="white" />
-        </div>
+        {event.imageUrl ? (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "linear-gradient(180deg, rgba(0,0,0,0.05), rgba(0,0,0,0.35))",
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 14,
+              background: event.institutionColor,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: `0 8px 24px ${event.institutionColor}44`,
+            }}
+          >
+            <Icon size={24} color="white" />
+          </div>
+        )}
       </div>
 
       <div style={{ padding: "16px 18px 18px" }}>
@@ -344,41 +341,58 @@ function EventCard({ event, dark }) {
           </span>
         </div>
 
-        <div style={{ marginBottom: 14 }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              fontSize: 11,
-              marginBottom: 4,
-              color: dark ? "#8896b3" : "#64748b",
-            }}
-          >
-            <span>{event.seats} kontenjan doldu</span>
-            <span style={{ color: isAlmostFull ? "#f97316" : undefined }}>
-              {event.totalSeats - event.seats} yer kaldı
-            </span>
-          </div>
-          <div
-            style={{
-              height: 4,
-              background: dark ? "#232b3e" : "#e8edf7",
-              borderRadius: 99,
-            }}
-          >
+        {hasSeatData ? (
+          <div style={{ marginBottom: 14 }}>
             <div
               style={{
-                height: "100%",
-                width: `${occupancyPercent}%`,
-                background: isAlmostFull
-                  ? "linear-gradient(90deg, #f59e0b, #f97316)"
-                  : "linear-gradient(90deg, #3b82f6, #6366f1)",
-                borderRadius: 99,
-                transition: "width 0.6s ease",
+                display: "flex",
+                justifyContent: "space-between",
+                fontSize: 11,
+                marginBottom: 4,
+                color: dark ? "#8896b3" : "#64748b",
               }}
-            />
+            >
+              <span>{event.seats} kontenjan doldu</span>
+              <span style={{ color: isAlmostFull ? "#f97316" : undefined }}>
+                {event.totalSeats - event.seats} yer kaldı
+              </span>
+            </div>
+            <div
+              style={{
+                height: 4,
+                background: dark ? "#232b3e" : "#e8edf7",
+                borderRadius: 99,
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: `${occupancyPercent}%`,
+                  background: isAlmostFull
+                    ? "linear-gradient(90deg, #f59e0b, #f97316)"
+                    : "linear-gradient(90deg, #3b82f6, #6366f1)",
+                  borderRadius: 99,
+                  transition: "width 0.6s ease",
+                }}
+              />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div
+            style={{
+              marginBottom: 14,
+              fontSize: 12,
+              color: dark ? "#9fb0ce" : "#475569",
+              lineHeight: 1.5,
+              display: "-webkit-box",
+              WebkitLineClamp: 3,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
+            {event.description || "Kontenjan bilgisi kaynakta paylaşılmamış."}
+          </div>
+        )}
 
         <div
           style={{
@@ -406,7 +420,10 @@ function EventCard({ event, dark }) {
           ))}
         </div>
 
-        <button
+        <a
+          href={event.url || "#"}
+          target="_blank"
+          rel="noreferrer"
           style={{
             width: "100%",
             padding: "10px 16px",
@@ -416,16 +433,18 @@ function EventCard({ event, dark }) {
             color: "white",
             fontSize: 13,
             fontWeight: 700,
-            cursor: "pointer",
+            cursor: event.url ? "pointer" : "not-allowed",
+            opacity: event.url ? 1 : 0.6,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             gap: 6,
             letterSpacing: "0.02em",
+            textDecoration: "none",
           }}
         >
           Detaya Git <ArrowRight size={14} />
-        </button>
+        </a>
       </div>
     </div>
   );
@@ -466,14 +485,197 @@ export default function EventsHorizon() {
   const [searchQuery, setSearchQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [events, setEvents] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const eventsSectionRef = useRef(null);
+  const hiddenInstitutions = useMemo(
+    () => new Set(["coderspace", "habitat"]),
+    []
+  );
 
   useEffect(() => {
+    const sourceColors = {
+      btk_akademi: "#2563eb",
+      gaziantep_bilim_merkezi: "#16a34a",
+      gdg_gaziantep: "#ea580c",
+      techcareer: "#7c3aed",
+      youthall: "#0891b2",
+    };
+
     supabase
       .from("events")
       .select("*")
       .eq("is_active", true)
-      .then(({ data }) => setEvents(data || []));
+      .then(({ data }) =>
+        setEvents(
+          (data || []).map((e) => ({
+            ...e,
+            title: e.title || "Başlık yok",
+            type: e.event_type || e.type || "Diğer",
+            date: e.start_date || e.date || "Tarih belirtilmemiş",
+            city: e.city || "Online",
+            price: e.price || "Belirtilmemiş",
+            mode: e.mode || "Online",
+            category: e.category || "Diğer",
+            tags: Array.isArray(e.tags) ? e.tags : [],
+            imageUrl: e.image_url || null,
+            description: e.description || null,
+            url: e.url || null,
+            institutionColor: sourceColors[e.source] || "#3b82f6",
+          }))
+        )
+      );
   }, []);
+
+  const cities = useMemo(() => {
+    const values = new Set(
+      events.map((e) => e.city).filter((v) => typeof v === "string" && v.trim())
+    );
+    return ["Tümü", ...Array.from(values).sort((a, b) => a.localeCompare(b, "tr"))];
+  }, [events]);
+
+  const eventTypes = useMemo(() => {
+    const values = new Set(
+      events.map((e) => e.type).filter((v) => typeof v === "string" && v.trim())
+    );
+    return ["Tümü", ...Array.from(values).sort((a, b) => a.localeCompare(b, "tr"))];
+  }, [events]);
+
+  const institutions = useMemo(() => {
+    const values = new Set(
+      events
+        .map((e) => e.institution)
+        .filter((v) => typeof v === "string" && v.trim())
+        .filter((v) => !hiddenInstitutions.has(v.toLowerCase()))
+    );
+    return ["Tümü", ...Array.from(values).sort((a, b) => a.localeCompare(b, "tr"))];
+  }, [events, hiddenInstitutions]);
+
+  const priceOptions = useMemo(() => {
+    const values = new Set(
+      events.map((e) => e.price).filter((v) => typeof v === "string" && v.trim())
+    );
+    return ["Tümü", ...Array.from(values).sort((a, b) => a.localeCompare(b, "tr"))];
+  }, [events]);
+
+  const stats = useMemo(() => {
+    const activeEventCount = events.length;
+    const institutionCount = Math.max(institutions.length - 1, 0); // "Tümü" hariç
+    const cityCount = Math.max(cities.length - 1, 0); // "Tümü" hariç
+
+    return [
+      { label: "Aktif Etkinlik", value: formatCompactNumber(activeEventCount) },
+      { label: "Kurum", value: formatCompactNumber(institutionCount) },
+      { label: "Şehir", value: formatCompactNumber(cityCount) },
+    ];
+  }, [events, institutions.length, cities.length]);
+
+  const quickAccessItems = useMemo(
+    () => [
+      {
+        icon: TrendingUp,
+        label: "Popüler Kurslar",
+        count: events.filter((e) => ["Kurs", "Bootcamp"].includes(e.type)).length,
+        onClick: () => {
+          setSelectedType("Kurs");
+          setSelectedPrice("Tümü");
+        },
+      },
+      {
+        icon: Trophy,
+        label: "Yaklaşan Hackathonlar",
+        count: events.filter((e) => e.type === "Hackathon").length,
+        onClick: () => {
+          setSelectedType("Hackathon");
+          setSelectedPrice("Tümü");
+        },
+      },
+      {
+        icon: Rocket,
+        label: "Bootcamp'ler",
+        count: events.filter((e) => e.type === "Bootcamp").length,
+        onClick: () => {
+          setSelectedType("Bootcamp");
+          setSelectedPrice("Tümü");
+        },
+      },
+      {
+        icon: GraduationCap,
+        label: "Sertifika Programları",
+        count: events.filter(
+          (e) =>
+            (e.title || "").toLowerCase().includes("sertifika") ||
+            (e.description || "").toLowerCase().includes("sertifika")
+        ).length,
+        onClick: () => {
+          setSelectedType("Tümü");
+          setSearchQuery("sertifika");
+        },
+      },
+      {
+        icon: Code2,
+        label: "Workshop'lar",
+        count: events.filter((e) => e.type === "Workshop").length,
+        onClick: () => {
+          setSelectedType("Workshop");
+          setSelectedPrice("Tümü");
+        },
+      },
+    ],
+    [events]
+  );
+
+  const topNavItems = useMemo(() => {
+    const popularCoursesCount = events.filter((e) =>
+      ["Kurs", "Bootcamp"].includes(e.type)
+    ).length;
+    const hackathonCount = events.filter((e) => e.type === "Hackathon").length;
+
+    return [
+      {
+        icon: TrendingUp,
+        label: "Popüler Kurslar",
+        visible: popularCoursesCount > 0,
+        onClick: () => {
+          setSelectedType("Kurs");
+          setSelectedPrice("Tümü");
+        },
+      },
+      {
+        icon: Trophy,
+        label: "Hackathonlar",
+        visible: hackathonCount > 0,
+        onClick: () => {
+          setSelectedType("Hackathon");
+          setSelectedPrice("Tümü");
+        },
+      },
+    ].filter((item) => item.visible);
+  }, [events]);
+
+  const scrollToEvents = () => {
+    requestAnimationFrame(() => {
+      eventsSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  };
+
+  useEffect(() => {
+    if (!cities.includes(selectedCity)) setSelectedCity("Tümü");
+  }, [cities, selectedCity]);
+
+  useEffect(() => {
+    if (!eventTypes.includes(selectedType)) setSelectedType("Tümü");
+  }, [eventTypes, selectedType]);
+
+  useEffect(() => {
+    if (!institutions.includes(selectedInstitution)) setSelectedInstitution("Tümü");
+  }, [institutions, selectedInstitution]);
+
+  useEffect(() => {
+    if (!priceOptions.includes(selectedPrice)) setSelectedPrice("Tümü");
+  }, [priceOptions, selectedPrice]);
   const bg = dark ? "#0d1120" : "#f0f4ff";
   const surface = dark ? "#161c2d" : "#ffffff";
   const surfaceBorder = dark ? "#232b3e" : "#e8edf7";
@@ -484,7 +686,10 @@ export default function EventsHorizon() {
   const filtered = events.filter((e) => {
     if (selectedCity !== "Tümü" && e.city !== selectedCity) return false;
     if (selectedType !== "Tümü" && e.type !== selectedType) return false;
-    if (selectedInstitution !== "Tümü" && e.institution !== selectedInstitution)
+    if (
+      selectedInstitution !== "Tümü" &&
+      e.institution !== selectedInstitution
+    )
       return false;
     if (selectedPrice !== "Tümü" && e.price !== selectedPrice) return false;
     if (
@@ -496,6 +701,28 @@ export default function EventsHorizon() {
       return false;
     return true;
   });
+  const itemsPerPage = 9;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+  const paginatedEvents = filtered.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    selectedCity,
+    selectedType,
+    selectedInstitution,
+    selectedPrice,
+    searchQuery,
+  ]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const featuredEvents = events.filter((e) => e.featured);
   const upcomingHackathons = events.filter((e) => e.type === "Hackathon");
@@ -529,24 +756,28 @@ export default function EventsHorizon() {
           justifyContent: "space-between",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <div
             style={{
-              width: 36,
-              height: 36,
+              width: 58,
+              height: 58,
               borderRadius: 10,
-              background: "linear-gradient(135deg, #3b82f6, #6366f1)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
+              overflow: "hidden",
             }}
           >
-            <Zap size={18} color="white" />
+            <img
+              src="/eventhorizon-logo.png"
+              alt="Event Horizon logo"
+              style={{ width: 60, height: 60, objectFit: "contain" }}
+            />
           </div>
           <div>
             <span
               style={{
-                fontSize: 17,
+                fontSize: 21,
                 fontWeight: 800,
                 color: textPrimary,
                 letterSpacing: "-0.03em",
@@ -567,33 +798,35 @@ export default function EventsHorizon() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <nav style={{ display: "flex", gap: 4 }}>
-            {[
-              { icon: TrendingUp, label: "Popüler Kurslar" },
-              { icon: Trophy, label: "Hackathonlar" },
-              { icon: Globe, label: "Türkiye Geneli" },
-            ].map(({ icon: Icon, label }) => (
-              <button
-                key={label}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 5,
-                  padding: "6px 12px",
-                  borderRadius: 8,
-                  border: "none",
-                  background: "transparent",
-                  color: textSecondary,
-                  fontSize: 13,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                }}
-              >
-                <Icon size={14} />
-                {label}
-              </button>
-            ))}
-          </nav>
+          {topNavItems.length > 0 && (
+            <nav style={{ display: "flex", gap: 4 }}>
+              {topNavItems.map(({ icon: Icon, label, onClick }) => (
+                <button
+                  key={label}
+                  onClick={() => {
+                    onClick();
+                    scrollToEvents();
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    padding: "6px 12px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: "transparent",
+                    color: textSecondary,
+                    fontSize: 13,
+                    fontWeight: 500,
+                    cursor: "pointer",
+                  }}
+                >
+                  <Icon size={14} />
+                  {label}
+                </button>
+              ))}
+            </nav>
+          )}
 
           <button
             onClick={() => setDark(!dark)}
@@ -809,12 +1042,7 @@ export default function EventsHorizon() {
               flexWrap: "wrap",
             }}
           >
-            {[
-              { label: "Aktif Etkinlik", value: "127" },
-              { label: "Kurum", value: "23" },
-              { label: "Şehir", value: "18" },
-              { label: "Katılımcı", value: "5.8K+" },
-            ].map(({ label, value }) => (
+            {stats.map(({ label, value }) => (
               <div key={label} style={{ textAlign: "center" }}>
                 <div
                   style={{
@@ -1049,19 +1277,10 @@ export default function EventsHorizon() {
             >
               Hızlı Erişim
             </h3>
-            {[
-              { icon: TrendingUp, label: "Popüler Kurslar", count: 34 },
-              { icon: Trophy, label: "Yaklaşan Hackathonlar", count: 7 },
-              { icon: Rocket, label: "Bootcamp'ler", count: 12 },
-              {
-                icon: GraduationCap,
-                label: "Sertifika Programları",
-                count: 19,
-              },
-              { icon: Code2, label: "Workshop'lar", count: 28 },
-            ].map(({ icon: Icon, label, count }) => (
+            {quickAccessItems.map(({ icon: Icon, label, count, onClick }) => (
               <button
                 key={label}
+                onClick={onClick}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -1138,6 +1357,7 @@ export default function EventsHorizon() {
 
           {/* Result Header */}
           <div
+            ref={eventsSectionRef}
             style={{
               display: "flex",
               justifyContent: "space-between",
@@ -1256,9 +1476,70 @@ export default function EventsHorizon() {
                 gap: 18,
               }}
             >
-              {filtered.map((event) => (
+              {paginatedEvents.map((event) => (
                 <EventCard key={event.id} event={event} dark={dark} />
               ))}
+            </div>
+          )}
+
+          {filtered.length > itemsPerPage && (
+            <div
+              style={{
+                marginTop: 20,
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  border: `1px solid ${surfaceBorder}`,
+                  background: dark ? "#161c2d" : "#ffffff",
+                  color: textPrimary,
+                  cursor: currentPage === 1 ? "not-allowed" : "pointer",
+                  opacity: currentPage === 1 ? 0.5 : 1,
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
+                Önceki
+              </button>
+
+              <span
+                style={{
+                  fontSize: 12,
+                  color: textSecondary,
+                  fontWeight: 600,
+                }}
+              >
+                Sayfa {currentPage} / {totalPages}
+              </span>
+
+              <button
+                onClick={() =>
+                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                }
+                disabled={currentPage === totalPages}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  border: `1px solid ${surfaceBorder}`,
+                  background: dark ? "#161c2d" : "#ffffff",
+                  color: textPrimary,
+                  cursor: currentPage === totalPages ? "not-allowed" : "pointer",
+                  opacity: currentPage === totalPages ? 0.5 : 1,
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
+                Sonraki
+              </button>
             </div>
           )}
 
@@ -1268,7 +1549,6 @@ export default function EventsHorizon() {
               style={{
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "space-between",
                 marginBottom: 18,
               }}
             >
@@ -1286,21 +1566,6 @@ export default function EventsHorizon() {
                 <Trophy size={18} style={{ color: "#f59e0b" }} /> Yaklaşan
                 Hackathonlar
               </h2>
-              <button
-                style={{
-                  fontSize: 12,
-                  color: "#3b82f6",
-                  fontWeight: 600,
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                }}
-              >
-                Tümünü Gör <ArrowRight size={12} />
-              </button>
             </div>
             <div
               style={{
