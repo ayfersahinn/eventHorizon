@@ -35,6 +35,7 @@ def analyze_with_groq(raw_content):
     - KATEGORİ: Etkinliğin ana konusunu belirle: 'Yapay Zeka', 'Web Geliştirme', 'Mobil', 'Siber Güvenlik', 'Veri Bilimi', 'Blockchain', 'Girişimcilik', 'Kariyer', 'Donanım', 'Oyun' veya 'Diğer'.
     - GÖRSEL: Etkinliğin görseli varsa URL'ini al, yoksa null bırak.
     - AÇIKLAMA: Etkinliğin kısa açıklamasını al, yoksa null bırak.
+    - Eğer giriş verisinde 'gorsel_url' veya 'aciklama' alanı zaten doluysa, mümkünse aynı değeri koru; keyfi olarak null yapma.
 
     Çıktıyı şu JSON formatında ver:
     {{
