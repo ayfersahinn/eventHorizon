@@ -55,6 +55,33 @@ async def get_techcareer_events():
                     date_el = await card.query_selector(".date, .event-date, span:has-text('2026'), span:has-text('2025')")
                     tarih = (await date_el.inner_text()).strip() if date_el else "Tarih Belirtilmemiş"
 
+                    # Kart içinden görsel ve kısa açıklama çek
+                    image_el = await card.query_selector("img")
+                    gorsel_url = ""
+                    if image_el:
+                        gorsel_url = (
+                            (await image_el.get_attribute("src"))
+                            or (await image_el.get_attribute("data-src"))
+                            or ""
+                        ).strip()
+                        if gorsel_url.startswith("//"):
+                            gorsel_url = "https:" + gorsel_url
+                        elif gorsel_url.startswith("/"):
+                            gorsel_url = "https://www.techcareer.net" + gorsel_url
+
+                    desc_el = await card.query_selector("p, .description, .event-description, .content")
+                    aciklama = (await desc_el.inner_text()).strip() if desc_el else ""
+
+                    # Başvurusu kapanmış etkinlikleri kaydetme
+                    card_text = ((await card.inner_text()) or "").lower()
+                    tarih_text = tarih.lower()
+                    if (
+                        "son başvurular tamamlandı" in card_text
+                        or "başvurular tamamlandı" in card_text
+                        or "başvurular tamamlandı" in tarih_text
+                    ):
+                        continue
+
                     # Şehir / Tür (Online/Fiziksel)
                     sehir = "Online"
                     if "İstanbul" in title or "Ankara" in title: # Basit bir tahmin
@@ -65,6 +92,8 @@ async def get_techcareer_events():
                         "sehir": sehir,
                         "tarih": tarih,
                         "durum": "Yaklaşan",
+                        "gorsel_url": gorsel_url or None,
+                        "aciklama": aciklama or None,
                         "link": href,
                         "kaynak": "techcareer"
                     })
