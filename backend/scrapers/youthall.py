@@ -134,6 +134,24 @@ async def get_youthall_events():
         # Şehir: tüm metinden ayrıca çıkar, title'a dokunma
         sehir = _extract_city(txt)
 
+        image_tag = a.select_one("img")
+        gorsel_url = ""
+        if image_tag:
+            gorsel_url = (image_tag.get("src") or image_tag.get("data-src") or "").strip()
+            if gorsel_url.startswith("//"):
+                gorsel_url = "https:" + gorsel_url
+            elif gorsel_url.startswith("/"):
+                gorsel_url = "https://www.youthall.com" + gorsel_url
+
+        aciklama = ""
+        title_node = a.select_one("h1, h2, h3, h4, h5, h6, .title")
+        if title_node:
+            clone = BeautifulSoup(str(a), "html.parser")
+            title_clone = clone.select_one("h1, h2, h3, h4, h5, h6, .title")
+            if title_clone:
+                title_clone.extract()
+            aciklama = re.sub(r"\s+", " ", clone.get_text(" ", strip=True)).strip()
+
         # Tarih: "Başlangıç 05 Mayıs" gibi
         start_raw = None
         m = re.search(r"\bBaşlangıç\b\s*([0-9]{1,2}\s+[A-Za-zÇĞİÖŞÜçğıöşü]+)", txt, re.IGNORECASE)
@@ -147,6 +165,8 @@ async def get_youthall_events():
                 "sehir": sehir,
                 "tarih": start_date or "Detay için linke tıklayın",
                 "durum": "Yaklaşan",
+                "gorsel_url": gorsel_url or None,
+                "aciklama": aciklama or None,
                 "link": full,
                 "kaynak": "youthall",
             }
