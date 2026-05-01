@@ -77,3 +77,31 @@ def filter_university_events(events):
         if is_university_friendly(" ".join(searchable_parts)):
             filtered.append(event)
     return filtered
+
+
+def filter_non_child_events(events):
+    """
+    Youthall gibi kaynaklarda daha geniş kapsam korumak için
+    sadece çocuk/okul öncesi-lise odaklı etkinlikleri eler.
+    """
+    filtered = []
+    for event in events:
+        searchable_parts = [
+            event.get("etkinlik_adi", ""),
+            event.get("tarih", ""),
+            event.get("durum", ""),
+            event.get("sehir", ""),
+            event.get("aciklama", ""),
+            " ".join(event.get("kategoriler", [])),
+            " ".join(
+                f"{item.get('tarih', '')} {item.get('mekan', '')}"
+                for item in event.get("tarih_detaylari", [])
+            ),
+        ]
+        normalized_text = clean_text(" ".join(searchable_parts)).casefold()
+        if not normalized_text:
+            continue
+        if any(keyword in normalized_text for keyword in EXCLUDED_KEYWORDS):
+            continue
+        filtered.append(event)
+    return filtered
