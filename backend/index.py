@@ -1,69 +1,128 @@
 import asyncio
 import json
 import sys
-
-# Scraper'ları import ediyoruz
+from datetime import datetime
+import time
 from scrapers.btk import scrape_btk_activities
 from scrapers.gaziantep import scrape_gaziantep_activities
 from scrapers.gdg import scrape_gdg_gaziantep_activities
-from scrapers.coderspace import get_coderspace_events 
 from scrapers.techcareer import get_techcareer_events
+from scrapers.youthall import get_youthall_events
 from analyzer import analyze_with_groq
 from filters import filter_university_events
-from scrapers.techcareer import get_techcareer_events
-from scrapers.habitat import get_habitat_events
+
+from supabase import create_client
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+
+def save_to_supabase(etkinlikler):
+    print(f"\n--- Supabase'e kaydediliyor ({len(etkinlikler)} etkinlik) ---")
+
+    for e in etkinlikler:
+        try:
+             
+            # upsert(on_conflict="url") zaten varsa günceller, yoksa ekler.
+            data = {
+                "title": e.get("etkinlik_adi"),
+                "institution": e.get("kurum"),
+                "city": e.get("sehir"),
+                "start_date": e.get("baslangic_tarihi"),
+                "end_date": e.get("bitis_tarihi"),
+                "event_type": e.get("etkinlik_turu"),
+                "mode": e.get("mod"),
+                "price": e.get("ucret"),
+                "category": e.get("kategori"),
+                "image_url": e.get("gorsel_url"),
+                "description": e.get("aciklama"),
+                "url": e.get("link"),
+                "source": e.get("kaynak"),
+                "is_active": True,
+                "updated_at": datetime.now().isoformat(),
+            }
+
+            # Tek bir çağrı ile hem insert hem update işlemi yapılır
+            supabase.table("events").upsert(data, on_conflict="url").execute()
+            print(f"  ✓ İşlem Başarılı: {e.get('etkinlik_adi')}")
+
+        except Exception as err:
+            print(f"  ✗ Hata ({e.get('etkinlik_adi')}): {err}")
+
 async def main():
     print("--- Veri Toplama İşlemi Başladı ---")
+    
+    # Tarihi geçmişleri pasif yapma işlemi
+    bugun_str = datetime.now().strftime("%d.%m.%Y")
+    try:
+        #Sadece 'is_active' olanları kontrol ederek veritabanı yükünü azaltın
+        supabase.table("events").update({"is_active": False}).eq("is_active", True).lt("end_date", bugun_str).execute()
+    except Exception as e:
+        print(f"Eski etkinlikleri pasifleştirme hatası: {e}")
 
+    # Supabase'deki mevcut URL'leri çek (mükerrer scrape/analizi azaltmak için)
+    try:
+        existing = supabase.table("events").select("url").execute()
+        existing_urls = {row["url"] for row in existing.data}
+    except Exception:
+        existing_urls = set()
+    
     try:
         results = await asyncio.gather(
             scrape_btk_activities(),
             scrape_gaziantep_activities(),
             scrape_gdg_gaziantep_activities(),
-            get_coderspace_events(),
             get_techcareer_events(),
-            get_habitat_events()
+            get_youthall_events(),
         )
     except Exception as e:
         print(f"Veri toplama hatası: {e}")
         return
 
-    btk_raw, gaziantep_raw, gdg_raw, coderspace_raw, techcareer_raw, habitat = results
+    btk_raw, gaziantep_raw, gdg_raw, techcareer_raw, youthall = results
 
-    # --- KRİTİK DEĞİŞİKLİK: BTK verilerini filtrelemeden alıyoruz ---
-    # BTK zaten resmi ve kaliteli eğitimler verdiği için onları doğrudan kabul ediyoruz.
-    # Diğer kaynakları ise senin yazdığın filtreden geçiriyoruz.
-    
     raw_data = {
-        "btk_akademi": btk_raw,  # Filtrelemedik, hepsi gelsin
+        "btk_akademi": btk_raw,
         "gaziantep_bilim_merkezi": filter_university_events(gaziantep_raw),
         "gdg_gaziantep": filter_university_events(gdg_raw),
-        "coderspace": filter_university_events(coderspace_raw),
         "techcareer": filter_university_events(techcareer_raw),
-        "habitat": filter_university_events(habitat),
+        "youthall": filter_university_events(youthall),
     }
 
-    # Sadece etkinlik bulunan kaynakları tutalım
     clean_data = {k: v for k, v in raw_data.items() if v}
+    
+    # Sadece veritabanında olmayanları ayır
+    for kaynak in list(clean_data.keys()):
+        onceki_sayi = len(clean_data[kaynak])
+        clean_data[kaynak] = [e for e in clean_data[kaynak] if e.get("link") not in existing_urls]
+        print(f"{kaynak}: {onceki_sayi} → {len(clean_data[kaynak])} yeni etkinlik")
+
+    clean_data = {k: v for k, v in clean_data.items() if v}
 
     if clean_data:
-        print(f"Groq veriyi analiz ediyor... (BTK: {len(btk_raw)} adet eklendi)")
-        payload = json.dumps(clean_data, ensure_ascii=False)
+        tum_etkinlikler = []
+        for kaynak, veri in clean_data.items():
+            print(f"{kaynak} analiz ediliyor ({len(veri)} yeni etkinlik)...")
+            payload = json.dumps({kaynak: veri}, ensure_ascii=False)
+            
+            try:
+                structured_json = analyze_with_groq(payload)
+                parsed = json.loads(structured_json)
+                etkinlikler = parsed.get("etkinlikler", [])
+                tum_etkinlikler.extend(etkinlikler)
+                print(f"  → {len(etkinlikler)} etkinlik normalize edildi")
+            except Exception as e:
+                print(f"  → {kaynak} analiz hatası: {e}")
+            
+            time.sleep(6) # Rate limit koruması
         
-        # Token limitini aşmamak için güvenli kesme (15000 karakter)
-        if len(payload) > 10000:
-            print("Uyarı: Veri çok büyük, optimize ediliyor...")
-            payload = payload[:10000]
-
-        try:
-            # ANALYZER.PY içinde modelin "llama-3.1-8b-instant" olduğundan emin ol!
-            structured_json = analyze_with_groq(payload)
-            print("\n--- SONUÇLAR ---")
-            print(structured_json)
-        except Exception as e:
-            print(f"Analiz hatası: {e}")
+        if tum_etkinlikler:
+            save_to_supabase(tum_etkinlikler)
+        else:
+            print("Kaydedilecek yeni etkinlik bulunamadı.")
     else:
-        print("Kriterlere uygun etkinlik bulunamadı.")
+        print("Yeni etkinlik yok, analiz atlanıyor.")
 
 if __name__ == "__main__":
     asyncio.run(main())
