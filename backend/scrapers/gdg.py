@@ -76,6 +76,13 @@ def normalize_gdg_event(raw_event):
     )
 
     description = clean_text(raw_event.get("description") or raw_event.get("summary"))
+    image_url = clean_text(
+        raw_event.get("image")
+        or raw_event.get("image_url")
+        or raw_event.get("cover_image")
+        or raw_event.get("cover_image_url")
+        or raw_event.get("thumbnail")
+    )
 
     return {
         "etkinlik_adi": title,
@@ -85,6 +92,7 @@ def normalize_gdg_event(raw_event):
         "durum": status,
         "kaynak": "gdg_gaziantep",
         "aciklama": description,
+        "gorsel_url": image_url,
         "konum": location,
     }
 
