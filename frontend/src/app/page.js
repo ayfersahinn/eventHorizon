@@ -1,4 +1,5 @@
 "use client";
+import { createClient } from "@supabase/supabase-js";
 import { useState, useEffect } from "react";
 import {
   MapPin,
@@ -30,117 +31,11 @@ import {
   Rocket,
   Target,
 } from "lucide-react";
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_KEY
+);
 
-const mockEvents = [
-  {
-    id: 1,
-    title: "Yapay Zeka ile Uygulama Geliştirme Bootcamp'i",
-    institution: "BTK Akademi",
-    institutionColor: "#0057B8",
-    city: "Gaziantep",
-    date: "15 Mayıs 2025",
-    endDate: "17 Mayıs 2025",
-    type: "Bootcamp",
-    mode: "Yüz Yüze",
-    price: "Ücretsiz",
-    category: "Yapay Zeka",
-    image: null,
-    tags: ["Python", "AI", "Makine Öğrenmesi"],
-    seats: 42,
-    totalSeats: 50,
-    featured: true,
-  },
-  {
-    id: 2,
-    title: "Web3 ve Blockchain Teknolojileri Workshop",
-    institution: "Teknogaraj",
-    institutionColor: "#FF6B35",
-    city: "İstanbul",
-    date: "22 Mayıs 2025",
-    endDate: "22 Mayıs 2025",
-    type: "Workshop",
-    mode: "Online",
-    price: "Ücretli",
-    category: "Blockchain",
-    image: null,
-    tags: ["Solidity", "Web3", "DeFi"],
-    seats: 8,
-    totalSeats: 30,
-    featured: false,
-  },
-  {
-    id: 3,
-    title: "Siber Güvenlik Temelleri Sertifika Programı",
-    institution: "T3 Vakfı",
-    institutionColor: "#2ECC71",
-    city: "Ankara",
-    date: "1 Haziran 2025",
-    endDate: "30 Haziran 2025",
-    type: "Kurs",
-    mode: "Online",
-    price: "Ücretsiz",
-    category: "Siber Güvenlik",
-    image: null,
-    tags: ["Network", "CTF", "Linux"],
-    seats: 120,
-    totalSeats: 200,
-    featured: false,
-  },
-  {
-    id: 4,
-    title: "Gaziantep Tech Hackathon 2025",
-    institution: "Gaziantep Büyükşehir",
-    institutionColor: "#9B59B6",
-    city: "Gaziantep",
-    date: "5 Haziran 2025",
-    endDate: "7 Haziran 2025",
-    type: "Hackathon",
-    mode: "Yüz Yüze",
-    price: "Ücretsiz",
-    category: "Hackathon",
-    image: null,
-    tags: ["IoT", "Akıllı Şehir", "Takım"],
-    seats: 15,
-    totalSeats: 100,
-    featured: true,
-  },
-  {
-    id: 5,
-    title: "Flutter ile Mobil Uygulama Geliştirme",
-    institution: "BTK Akademi",
-    institutionColor: "#0057B8",
-    city: "İzmir",
-    date: "10 Haziran 2025",
-    endDate: "14 Haziran 2025",
-    type: "Workshop",
-    mode: "Yüz Yüze",
-    price: "Ücretli",
-    category: "Mobil",
-    image: null,
-    tags: ["Flutter", "Dart", "UI/UX"],
-    seats: 22,
-    totalSeats: 25,
-    featured: false,
-  },
-  {
-    id: 6,
-    title: "Veri Bilimi & Makine Öğrenmesi Yoğun Kampı",
-    institution: "T3 Vakfı",
-    institutionColor: "#2ECC71",
-    city: "Gaziantep",
-    date: "20 Haziran 2025",
-    endDate: "22 Haziran 2025",
-    type: "Bootcamp",
-    mode: "Yüz Yüze",
-    price: "Ücretsiz",
-    category: "Veri Bilimi",
-    image: null,
-    tags: ["Python", "Pandas", "TensorFlow"],
-    seats: 30,
-    totalSeats: 40,
-    featured: false,
-  },
-];
 
 const cities = [
   "Tümü",
@@ -493,7 +388,7 @@ function EventCard({ event, dark }) {
             marginBottom: 14,
           }}
         >
-          {event.tags.map((tag) => (
+         {(event.tags || []).map((tag) => (
             <span
               key={tag}
               style={{
@@ -570,7 +465,15 @@ export default function EventsHorizon() {
   const [selectedPrice, setSelectedPrice] = useState("Tümü");
   const [searchQuery, setSearchQuery] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [events, setEvents] = useState([]);
 
+  useEffect(() => {
+    supabase
+      .from("events")
+      .select("*")
+      .eq("is_active", true)
+      .then(({ data }) => setEvents(data || []));
+  }, []);
   const bg = dark ? "#0d1120" : "#f0f4ff";
   const surface = dark ? "#161c2d" : "#ffffff";
   const surfaceBorder = dark ? "#232b3e" : "#e8edf7";
@@ -578,7 +481,7 @@ export default function EventsHorizon() {
   const textSecondary = dark ? "#8896b3" : "#64748b";
   const navBg = dark ? "rgba(13,17,32,0.85)" : "rgba(240,244,255,0.85)";
 
-  const filtered = mockEvents.filter((e) => {
+  const filtered = events.filter((e) => {
     if (selectedCity !== "Tümü" && e.city !== selectedCity) return false;
     if (selectedType !== "Tümü" && e.type !== selectedType) return false;
     if (selectedInstitution !== "Tümü" && e.institution !== selectedInstitution)
@@ -594,9 +497,9 @@ export default function EventsHorizon() {
     return true;
   });
 
-  const featuredEvents = mockEvents.filter((e) => e.featured);
-  const upcomingHackathons = mockEvents.filter((e) => e.type === "Hackathon");
-  const popularCourses = mockEvents
+  const featuredEvents = events.filter((e) => e.featured);
+  const upcomingHackathons = events.filter((e) => e.type === "Hackathon");
+  const popularCourses = events
     .filter((e) => ["Kurs", "Bootcamp"].includes(e.type))
     .slice(0, 3);
 
