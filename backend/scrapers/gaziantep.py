@@ -25,10 +25,25 @@ async def fetch_gaziantep_detail(http_client, item):
     try:
         response = await http_client.get(item["link"])
         response.raise_for_status()
-        item["tarih_detaylari"] = extract_gaziantep_dates(response.text)
+        detail_html = response.text
+        item["tarih_detaylari"] = extract_gaziantep_dates(detail_html)
+        img_match = re.search(
+            r'<meta\s+property="og:image"\s+content="([^"]+)"',
+            detail_html,
+            flags=re.IGNORECASE,
+        ) or re.search(r'<img[^>]+src="([^"]+)"', detail_html, flags=re.IGNORECASE)
+        desc_match = re.search(
+            r'<meta\s+property="og:description"\s+content="([^"]+)"',
+            detail_html,
+            flags=re.IGNORECASE,
+        ) or re.search(r"<p[^>]*>(.*?)</p>", detail_html, flags=re.IGNORECASE | re.DOTALL)
+        item["gorsel_url"] = clean_text(img_match.group(1)) if img_match else None
+        item["aciklama"] = clean_text(desc_match.group(1)) if desc_match else None
     except Exception as exc:
         item["detay_hatasi"] = f"{type(exc).__name__}: {exc}"
         item["tarih_detaylari"] = []
+        item["gorsel_url"] = None
+        item["aciklama"] = None
     return item
 
 async def scrape_gaziantep_activities():
