@@ -9,7 +9,7 @@ from scrapers.gdg import scrape_gdg_gaziantep_activities
 from scrapers.techcareer import get_techcareer_events
 from scrapers.youthall import get_youthall_events
 from analyzer import analyze_with_groq
-from filters import filter_university_events
+from filters import filter_university_events, filter_non_child_events
 
 from supabase import create_client
 from dotenv import load_dotenv
@@ -35,8 +35,9 @@ def save_to_supabase(etkinlikler):
                 "mode": e.get("mod"),
                 "price": e.get("ucret"),
                 "category": e.get("kategori"),
-                "image_url": e.get("gorsel_url"),
-                "description": e.get("aciklama"),
+                # Model farklı anahtar adları döndürürse de alanları kaçırma.
+                "image_url": e.get("gorsel_url") or e.get("image_url"),
+                "description": e.get("aciklama") or e.get("description"),
                 "url": e.get("link"),
                 "source": e.get("kaynak"),
                 "is_active": True,
@@ -87,7 +88,8 @@ async def main():
         "gaziantep_bilim_merkezi": filter_university_events(gaziantep_raw),
         "gdg_gaziantep": filter_university_events(gdg_raw),
         "techcareer": filter_university_events(techcareer_raw),
-        "youthall": filter_university_events(youthall),
+        # Youthall genel kariyer etkinlikleri içerdiği için daha esnek filtre kullan.
+        "youthall": filter_non_child_events(youthall),
     }
 
     clean_data = {k: v for k, v in raw_data.items() if v}
